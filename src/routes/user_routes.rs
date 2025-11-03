@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    routes::utils_routes::internal_server_error_response,
+    routes::utils_routes::{conflict_reponse, internal_server_error_response, not_found_response},
     structs::{
         db_struct::{CreateUser, Service, UpdateUser, User, UserWithServices},
         response_struct::ApiResponse,
@@ -47,17 +47,9 @@ async fn create_user(pool: web::Data<PgPool>, body: web::Json<CreateUser>) -> im
 
         Err(sqlx::Error::Database(db_err)) => {
             if db_err.is_unique_violation() {
-                HttpResponse::Conflict().json(ApiResponse::<()> {
-                    message: Some("Username or email already exists".to_string()),
-                    data: None,
-                    success: false,
-                })
+                conflict_reponse("Username or email already exists".to_string())
             } else {
-                HttpResponse::InternalServerError().json(ApiResponse::<()> {
-                    message: Some(db_err.to_string()),
-                    data: None,
-                    success: false,
-                })
+                internal_server_error_response(db_err.to_string())
             }
         }
 
@@ -88,11 +80,7 @@ async fn get_user_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl 
             success: true,
         }),
 
-        Err(sqlx::Error::RowNotFound) => HttpResponse::NotFound().json(ApiResponse::<()> {
-            message: Some("User not found".to_string()),
-            data: None,
-            success: false,
-        }),
+        Err(sqlx::Error::RowNotFound) => not_found_response("User not found".to_string()),
 
         Err(e) => internal_server_error_response(e.to_string()),
     }
@@ -235,19 +223,11 @@ async fn update_user(
             success: true,
         }),
 
-        Err(sqlx::Error::RowNotFound) => HttpResponse::NotFound().json(ApiResponse::<()> {
-            message: Some("User not found".to_string()),
-            data: None,
-            success: false,
-        }),
+        Err(sqlx::Error::RowNotFound) => not_found_response("User not found".to_string()),
 
         Err(sqlx::Error::Database(db_err)) => {
             if db_err.is_unique_violation() {
-                HttpResponse::Conflict().json(ApiResponse::<()> {
-                    message: Some("Username or email already exists".to_string()),
-                    data: None,
-                    success: false,
-                })
+                conflict_reponse("Username or email already exists".to_string())
             } else {
                 internal_server_error_response(db_err.to_string())
             }

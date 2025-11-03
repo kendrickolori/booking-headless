@@ -1,5 +1,5 @@
 use crate::{
-    routes::utils_routes::internal_server_error_response,
+    routes::utils_routes::{internal_server_error_response, not_found_response},
     structs::{
         db_struct::{CreateService, Service, UpdateService},
         response_struct::ApiResponse,
@@ -45,11 +45,7 @@ async fn create_service(pool: web::Data<PgPool>, body: web::Json<CreateService>)
         Err(e) => {
             if let sqlx::Error::Database(db_err) = &e {
                 if db_err.is_foreign_key_violation() {
-                    return HttpResponse::NotFound().json(ApiResponse::<()> {
-                        success: false,
-                        data: None,
-                        message: Some("The user_id provided does not exist.".to_string()),
-                    });
+                    return not_found_response("The user_id provided does not exist.".to_string());
                 }
             }
 
@@ -89,11 +85,7 @@ async fn get_service_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> im
             message: Some("Service retrieved successfully".to_string()),
         }),
 
-        Err(sqlx::Error::RowNotFound) => HttpResponse::NotFound().json(ApiResponse::<()> {
-            success: false,
-            data: None,
-            message: Some("Service not found".to_string()),
-        }),
+        Err(sqlx::Error::RowNotFound) => not_found_response("Service not found".to_string()),
 
         Err(e) => internal_server_error_response(e.to_string()),
     }
@@ -177,11 +169,7 @@ async fn update_service(
             message: Some("Service updated successfully".to_string()),
         }),
 
-        Err(sqlx::Error::RowNotFound) => HttpResponse::NotFound().json(ApiResponse::<()> {
-            success: false,
-            data: None,
-            message: Some("Service not found".to_string()),
-        }),
+        Err(sqlx::Error::RowNotFound) => not_found_response("Service not found".to_string()),
 
         Err(e) => internal_server_error_response(e.to_string()),
     }
@@ -218,11 +206,7 @@ async fn delete_service(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl 
             message: Some("Service deleted successfully".to_string()),
         }),
 
-        Err(sqlx::Error::RowNotFound) => HttpResponse::NotFound().json(ApiResponse::<()> {
-            success: false,
-            data: None,
-            message: Some("Service not found".to_string()),
-        }),
+        Err(sqlx::Error::RowNotFound) => not_found_response("Service not found".to_string()),
 
         Err(e) => internal_server_error_response(e.to_string()),
     }

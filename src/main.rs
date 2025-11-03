@@ -3,7 +3,7 @@ mod structs;
 mod utils;
 
 use crate::{
-    routes::utils_routes::{home, not_found},
+    routes::utils_routes::{home, route_not_found},
     utils::response_utils::{json_error_handler, path_error_handler},
 };
 use actix_web::{App, HttpServer, web};
@@ -44,7 +44,7 @@ async fn main() -> std::io::Result<()> {
             .configure(user_routes::user_config)
             .configure(service_routes::service_config)
             .service(home)
-            .default_service(web::to(not_found))
+            .default_service(web::to(route_not_found))
     })
     .bind(("127.0.0.1", 8080))?
     .run()
