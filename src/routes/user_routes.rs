@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
+    middlewares::auth_middleware::AuthenticatedUser,
     routes::utils_routes::{conflict_reponse, internal_server_error_response, not_found_response},
     structs::{
         db_struct::{Appointment, CreateUser, Service, UpdateUser, User, UserWithServices},
@@ -285,9 +286,42 @@ async fn get_appointments_for_user(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
+async fn get_me(user: AuthenticatedUser, pool: web::Data<PgPool>) -> impl Responder {
+    let logged_in_user_id = user.user_id;
+
+    match sqlx::query_as!(
+        User,
+        r#"SELECT * FROM users WHERE id = $1"#,
+        logged_in_user_id
+    )
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(user) => HttpResponse::Ok().json(ApiResponse {
+            success: true,
+            data: Some(user),
+            message: None,
+        }),
+
+        Err(sqlx::Error::RowNotFound) => not_found_response("User not found".to_string()),
+        Err(e) => internal_server_error_response(e.to_string()),
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+
 pub fn user_config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/users")
+            .route("/me", web::get().to(get_me))
             .route("/with-services", web::get().to(get_all_users_with_services))
             .route(
                 "/{id}/appointments",
