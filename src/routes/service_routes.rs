@@ -1,4 +1,5 @@
 use crate::{
+    middlewares::auth_middleware::AuthenticatedUser,
     routes::utils_routes::{internal_server_error_response, not_found_response},
     structs::{
         db_struct::{CreateService, Service, UpdateService},
@@ -13,8 +14,13 @@ use uuid::Uuid;
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn create_service(pool: web::Data<PgPool>, body: web::Json<CreateService>) -> impl Responder {
+async fn create_service(
+    user: AuthenticatedUser,
+    pool: web::Data<PgPool>,
+    body: web::Json<CreateService>,
+) -> impl Responder {
     let new_service = body.into_inner();
+    let user_id = user.user_id;
 
     match sqlx::query_as!(
         Service,
@@ -26,7 +32,7 @@ async fn create_service(pool: web::Data<PgPool>, body: web::Json<CreateService>)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
         "#,
-        new_service.user_id,
+        user_id,
         new_service.service_name,
         new_service.description,
         new_service.price,
@@ -134,12 +140,40 @@ async fn get_all_services(pool: web::Data<PgPool>) -> impl Responder {
 
 async fn update_service(
     path: web::Path<Uuid>,
+    user: AuthenticatedUser,
     pool: web::Data<PgPool>,
     body: web::Json<UpdateService>,
 ) -> impl Responder {
     let service_id = path.into_inner();
+    let user_id = user.user_id;
     let fields_to_update = body.into_inner();
 
+    let service_to_update =
+        match sqlx::query_as!(Service, "SELECT * FROM services WHERE id = $1", service_id)
+            .fetch_one(pool.get_ref())
+            .await
+        {
+            Ok(service) => service,
+
+            Err(sqlx::Error::RowNotFound) => {
+                return not_found_response("Service not found".to_string());
+            }
+
+            Err(e) => {
+                return internal_server_error_response(e.to_string());
+            }
+        };
+
+    // Check ownership
+    if service_to_update.user_id != user_id {
+        return HttpResponse::Forbidden().json(ApiResponse::<()> {
+            success: false,
+            data: None,
+            message: Some("You do not have permission to edit this service.".to_string()),
+        });
+    }
+
+    // The user is authorized, now we can update the service
     match sqlx::query_as!(
         Service,
         r#"
@@ -169,8 +203,6 @@ async fn update_service(
             message: Some("Service updated successfully".to_string()),
         }),
 
-        Err(sqlx::Error::RowNotFound) => not_found_response("Service not found".to_string()),
-
         Err(e) => internal_server_error_response(e.to_string()),
     }
 }
@@ -185,9 +217,40 @@ async fn update_service(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn delete_service(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl Responder {
+async fn delete_service(
+    user: AuthenticatedUser,
+    path: web::Path<Uuid>,
+    pool: web::Data<PgPool>,
+) -> impl Responder {
     let service_id = path.into_inner();
+    let user_id = user.user_id;
 
+    let service_to_delete =
+        match sqlx::query_as!(Service, "SELECT * FROM services WHERE id = $1", service_id)
+            .fetch_one(pool.get_ref())
+            .await
+        {
+            Ok(service) => service,
+
+            Err(sqlx::Error::RowNotFound) => {
+                return not_found_response("Service not found".to_string());
+            }
+
+            Err(e) => {
+                return internal_server_error_response(e.to_string());
+            }
+        };
+
+    // Check ownership
+    if service_to_delete.user_id != user_id {
+        return HttpResponse::Forbidden().json(ApiResponse::<()> {
+            success: false,
+            data: None,
+            message: Some("You do not have permission to delete this service.".to_string()),
+        });
+    }
+
+    // The user is authorized, now we can delete the service
     match sqlx::query_as!(
         Service,
         r#"
@@ -205,8 +268,6 @@ async fn delete_service(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl 
             data: Some(deleted_service),
             message: Some("Service deleted successfully".to_string()),
         }),
-
-        Err(sqlx::Error::RowNotFound) => not_found_response("Service not found".to_string()),
 
         Err(e) => internal_server_error_response(e.to_string()),
     }
