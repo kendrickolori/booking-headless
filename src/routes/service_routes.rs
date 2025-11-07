@@ -19,8 +19,19 @@ async fn create_service(
     pool: web::Data<PgPool>,
     body: web::Json<CreateService>,
 ) -> impl Responder {
-    let new_service = body.into_inner();
+    let mut new_service = body.into_inner();
     let user_id = user.user_id;
+
+    // Check if service_name is empty or only whitespace
+    if new_service.service_name.trim().is_empty() {
+        return HttpResponse::BadRequest().json(ApiResponse::<()> {
+            success: false,
+            data: None,
+            message: Some("Service name cannot be empty.".to_string()),
+        });
+    } else {
+        new_service.service_name = new_service.service_name.trim().to_string();
+    }
 
     match sqlx::query_as!(
         Service,
@@ -146,7 +157,16 @@ async fn update_service(
 ) -> impl Responder {
     let service_id = path.into_inner();
     let user_id = user.user_id;
-    let fields_to_update = body.into_inner();
+    let mut fields_to_update = body.into_inner();
+
+    // Check if service_name is empty or only whitespace
+    if let Some(service_name) = fields_to_update.service_name.clone() {
+        if service_name.trim().is_empty() {
+            fields_to_update.service_name = None;
+        } else {
+            fields_to_update.service_name = Some(service_name.trim().to_string());
+        }
+    }
 
     let service_to_update =
         match sqlx::query_as!(Service, "SELECT * FROM services WHERE id = $1", service_id)
