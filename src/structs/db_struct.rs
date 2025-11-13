@@ -102,6 +102,7 @@ pub struct Service {
     pub description: Option<String>,
     pub price: Option<Decimal>,
     pub duration_minutes: Option<i32>,
+    pub image_url: Option<String>,
     pub category: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,

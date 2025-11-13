@@ -9,8 +9,8 @@ CREATE TABLE
         email VARCHAR(255) NOT NULL UNIQUE,
         location VARCHAR(255),
         phone_number VARCHAR(20),
-        cover_image_url VARCHAR(512),
-        profile_image_url VARCHAR(512),
+        cover_image_url VARCHAR(1024),
+        profile_image_url VARCHAR(1024),
         description TEXT,
         is_verified BOOLEAN DEFAULT FALSE,
         google_is_connected BOOLEAN DEFAULT FALSE,
@@ -43,6 +43,7 @@ CREATE TABLE
         description TEXT,
         price DECIMAL(10, 2),
         duration_minutes INT,
+        image_url VARCHAR(1024),
         category VARCHAR(100),
         created_at TIMESTAMPTZ DEFAULT NOW (),
         updated_at TIMESTAMPTZ DEFAULT NOW ()
