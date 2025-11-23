@@ -1,20 +1,21 @@
 use crate::{
     config::Config,
     routes::utils_routes::{
-        bad_request_response, internal_server_error_response, not_found_response,
+        bad_request_response, expectation_failed_response, internal_server_error_response,
+        not_found_response,
     },
     structs::{
         db_struct::{
-            Appointment, Auth, CreateAppointment, GoogleCalendarEvent, GoogleEventAttendee,
-            GoogleEventDateTime, Service,
+            Appointment, Auth, AvailabilityRule, CreateAppointment, GoogleCalendarEvent,
+            GoogleEventAttendee, GoogleEventDateTime, Service,
         },
         response_struct::ApiResponse,
     },
-    utils::auth_utils::get_new_access_token,
+    utils::{auth_utils::get_new_access_token, others_utils::convert_to_local_primitive},
 };
 use actix_web::{HttpResponse, Responder, web};
-use chrono::Duration;
 use sqlx::PgPool;
+use time::{Duration, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
 /* -------------------------------------------------------------------------- */
@@ -28,36 +29,15 @@ async fn create_appointment(
 ) -> impl Responder {
     let new_appt = body.into_inner();
 
-    // Start a transaction
+    // Start Transaction
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
-        Err(e) => return internal_server_error_response(e.to_string()),
+        Err(e) => {
+            return internal_server_error_response(format!("Failed to start transaction: {}", e));
+        }
     };
 
-    // Check if the business is active
-    let user_status = sqlx::query_scalar!(
-        r#"SELECT is_active as "is_active!: bool" FROM users WHERE id = $1"#,
-        new_appt.business_id
-    )
-    .fetch_optional(&mut *tx)
-    .await;
-
-    match user_status {
-        Ok(Some(true)) => {}
-
-        Ok(Some(false)) => {
-            tx.rollback().await.ok();
-            return bad_request_response(
-                "This business is not currently accepting appointments.".to_string(),
-            );
-        }
-        _ => {
-            tx.rollback().await.ok();
-            return bad_request_response("Invalid business_id or business not found.".to_string());
-        }
-    }
-
-    // Get the service duration
+    // Fetch Service to know the duration
     let service = match sqlx::query_as!(
         Service,
         r#"SELECT * FROM services WHERE id = $1"#,
@@ -66,28 +46,128 @@ async fn create_appointment(
     .fetch_one(&mut *tx)
     .await
     {
-        Ok(service) => service,
+        Ok(s) => s,
 
-        Err(_) => {
+        Err(sqlx::Error::RowNotFound) => {
             tx.rollback().await.ok();
-            return internal_server_error_response(
-                "Could not find the service details.".to_string(),
-            );
+            return bad_request_response("Invalid service_id.".to_string());
+        }
+
+        Err(e) => {
+            tx.rollback().await.ok();
+            return internal_server_error_response(e.to_string());
         }
     };
 
+    // Fetch Business Auth for Google Token
+    let auth_record = match sqlx::query_as!(
+        Auth,
+        r#"SELECT * FROM auth WHERE user_id = $1"#,
+        new_appt.business_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    {
+        Ok(a) => a,
+
+        Err(sqlx::Error::RowNotFound) => {
+            tx.rollback().await.ok();
+            return bad_request_response("Business not found or not authenticated.".to_string());
+        }
+
+        Err(e) => {
+            tx.rollback().await.ok();
+            return internal_server_error_response(e.to_string());
+        }
+    };
+
+    // Check Business Active Status
+    let is_active = sqlx::query_scalar!(
+        r#"SELECT is_active as "is_active!: bool" FROM users WHERE id = $1"#,
+        new_appt.business_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap_or(false);
+
+    if !is_active {
+        tx.rollback().await.ok();
+
+        return bad_request_response(
+            "This business is not currently accepting appointments.".to_string(),
+        );
+    }
+
+    // Calculate Time & Check Availability
     let start_time = new_appt.appointment_start_time;
     let duration = service.duration_minutes.unwrap_or(30);
     let end_time = start_time + Duration::minutes(duration as i64);
+    let weekday = start_time.weekday().number_from_monday() as i32;
 
-    // Save the appointment to OUR database first
+    let rules = match sqlx::query_as!(
+        AvailabilityRule,
+        r#"SELECT * FROM business_availability WHERE user_id = $1 AND day_of_week = $2"#,
+        new_appt.business_id,
+        weekday
+    )
+    .fetch_all(&mut *tx)
+    .await
+    {
+        Ok(r) => r,
+
+        Err(e) => {
+            tx.rollback().await.ok();
+
+            return internal_server_error_response(e.to_string());
+        }
+    };
+
+    if rules.is_empty() {
+        tx.rollback().await.ok();
+
+        return bad_request_response("Business is closed on this day.".to_string());
+    }
+
+    // Conversion and Comparison Logic
+    let first_rule = &rules[0];
+
+    let local_start = match convert_to_local_primitive(start_time, &first_rule.time_zone) {
+        Ok(dt) => dt.time(),
+
+        Err(e) => {
+            tx.rollback().await.ok();
+
+            return internal_server_error_response(e);
+        }
+    };
+
+    let local_end = match convert_to_local_primitive(end_time, &first_rule.time_zone) {
+        Ok(dt) => dt.time(),
+
+        Err(e) => {
+            tx.rollback().await.ok();
+
+            return internal_server_error_response(e);
+        }
+    };
+
+    let business_is_available = rules
+        .iter()
+        .any(|rule| local_start >= rule.open_time && local_end <= rule.close_time);
+
+    if !business_is_available {
+        tx.rollback().await.ok();
+
+        return bad_request_response("Requested slot is outside operating hours.".to_string());
+    }
+
+    // Save Appointment to Database
     let appointment = match sqlx::query_as!(
         Appointment,
         r#"
         INSERT INTO appointments (
-            service_id, business_id, customer_name, 
-            customer_email, customer_phone, appointment_start_time,
-            appointment_end_time, notes
+            service_id, business_id, customer_name, customer_email, 
+            customer_phone, appointment_start_time, notes, appointment_end_time
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
@@ -98,23 +178,13 @@ async fn create_appointment(
         new_appt.customer_email,
         new_appt.customer_phone,
         start_time,
-        end_time,
-        new_appt.notes.unwrap_or("".to_string())
+        new_appt.notes,
+        end_time
     )
     .fetch_one(&mut *tx)
     .await
     {
-        Ok(appointment) => appointment,
-
-        Err(sqlx::Error::Database(db_err)) => {
-            tx.rollback().await.ok();
-
-            if db_err.is_foreign_key_violation() {
-                return bad_request_response("Invalid service_id or business_id.".to_string());
-            } else {
-                return internal_server_error_response(db_err.to_string());
-            }
-        }
+        Ok(appt) => appt,
 
         Err(e) => {
             tx.rollback().await.ok();
@@ -122,38 +192,50 @@ async fn create_appointment(
         }
     };
 
-    // Get the business's Google Refresh Token
-    let auth_record = match sqlx::query_as!(
-        Auth,
-        r#"SELECT * FROM auth WHERE user_id = $1"#,
-        new_appt.business_id
-    )
-    .fetch_one(&mut *tx)
-    .await
-    {
-        Ok(auth) => auth,
-
-        Err(_) => {
-            tx.rollback().await.ok();
-            return internal_server_error_response(
-                "Could not find auth credentials for this business.".to_string(),
-            );
-        }
-    };
-
-    // Call Google Calendar API
+    // Google Calendar Sync
     if let Some(refresh_token) = auth_record.refresh_token {
         let http_client = reqwest::Client::new();
 
-        // Get a new Access Token from Google
         let access_token = match get_new_access_token(config, &http_client, refresh_token).await {
             Ok(token) => token,
 
             Err(e) => {
                 tx.rollback().await.ok();
-                return internal_server_error_response(e);
+
+                return internal_server_error_response(format!(
+                    "Failed to refresh Google token: {}",
+                    e
+                ));
             }
         };
+
+        // Format Dates Safely
+        let start_fmt = match start_time.format(&Rfc3339) {
+            Ok(formatted_string) => formatted_string,
+
+            Err(e) => {
+                tx.rollback().await.ok();
+
+                return internal_server_error_response(e.to_string());
+            }
+        };
+
+        let end_fmt = match end_time.format(&Rfc3339) {
+            Ok(formatted_string) => formatted_string,
+
+            Err(e) => {
+                tx.rollback().await.ok();
+
+                return internal_server_error_response(e.to_string());
+            }
+        };
+
+        // Build Event
+        let notes_str = new_appt
+            .notes
+            .as_deref()
+            .map(|n| format!("\n\nNotes: {}", n))
+            .unwrap_or("N/A".to_string());
 
         let event = GoogleCalendarEvent {
             summary: format!(
@@ -161,17 +243,18 @@ async fn create_appointment(
                 service.service_name, new_appt.customer_name
             ),
             description: format!(
-                "Service: {}\nCustomer Phone: {}\nCustomer Email: {}",
+                "Service: {}\nCustomer Phone: {}\nCustomer Email: {}\nNote: {}",
                 service.service_name,
                 new_appt.customer_phone.as_deref().unwrap_or("N/A"),
-                new_appt.customer_email.as_deref().unwrap_or("N/A")
+                new_appt.customer_email.as_deref().unwrap_or("N/A"),
+                notes_str
             ),
             start: GoogleEventDateTime {
-                date_time: start_time.to_rfc3339(),
+                date_time: start_fmt,
                 time_zone: "UTC".to_string(),
             },
             end: GoogleEventDateTime {
-                date_time: end_time.to_rfc3339(),
+                date_time: end_fmt,
                 time_zone: "UTC".to_string(),
             },
             attendees: vec![
@@ -182,45 +265,58 @@ async fn create_appointment(
             ],
         };
 
-        // Send the event to Google
-        let res = http_client
+        // Send to Google Calendar
+        let google_res = http_client
             .post("https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all")
             .bearer_auth(access_token)
             .json(&event)
             .send()
             .await;
 
-        if let Err(e) = res {
-            tx.rollback().await.ok();
-            return internal_server_error_response(format!(
-                "Failed to create Google Calendar event: {}",
-                e
-            ));
+        match google_res {
+            Ok(res) if res.status().is_success() => {}
+
+            Ok(res) => {
+                // Google returned an error, maybe a 400 - Bad Request
+                let err_text = res.text().await.unwrap_or_default();
+
+                tx.rollback().await.ok();
+
+                return internal_server_error_response(format!(
+                    "Google Calendar API Error: {}",
+                    err_text
+                ));
+            }
+
+            Err(e) => {
+                tx.rollback().await.ok();
+
+                return internal_server_error_response(format!("Failed to contact Google: {}", e));
+            }
         }
     } else {
-        println!(
-            "Business {} has no refresh token, skipping calendar sync.",
+        let message = format!(
+            "Info: Business {} has no Google Calendar connected.",
             new_appt.business_id
         );
+
+        return expectation_failed_response(message);
     }
 
-    // Commit our local transaction
+    // Commit Transaction
     if let Err(e) = tx.commit().await {
-        return internal_server_error_response(e.to_string());
+        return internal_server_error_response(format!("Failed to commit transaction: {}", e));
     }
 
-    // Return success
+    // Return Success
     let response = ApiResponse {
         success: true,
         data: Some(appointment),
-        message: Some(
-            "Appointment created successfully and synced to Google Calendar.".to_string(),
-        ),
+        message: Some("Appointment created and synced.".to_string()),
     };
 
     HttpResponse::Created().json(response)
 }
-
 /* -------------------------------------------------------------------------- */
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */

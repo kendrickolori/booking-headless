@@ -7,14 +7,13 @@ edition = "2024"
 rust_decimal = { version = "1.39.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 actix-web = "4"
-chrono = { version = "0.4.42", features = ["serde"] }
 dotenv = "0.15.0"
 sqlx = { version = "0.8.6", features = [
     "runtime-tokio-rustls",
     "postgres",
     "uuid",
-    "chrono",
     "rust_decimal",
+    "time",
 ] }
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
 oauth2 = { version = "5.0.0", default-features = false, features = ["reqwest"] }
@@ -28,3 +27,6 @@ gcloud-storage = { version = "1.1.1", default-features = false, features = [
     "rustls-tls",
     "auth",
 ] }
+time = { version = "0.3.34", features = ["serde", "macros", "formatting", "parsing"] }
+chrono = "0.4.42"
+chrono-tz = "0.10.4"

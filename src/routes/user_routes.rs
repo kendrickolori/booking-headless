@@ -7,8 +7,11 @@ use crate::{
         bad_request_response, conflict_reponse, internal_server_error_response, not_found_response,
     },
     structs::{
-        db_struct::{Appointment, Service, UpdateUser, User, UserStatus, UserWithServices},
-        response_struct::ApiResponse,
+        db_struct::{
+            Appointment, AvailabilityRule, Service, SetAvailability, UpdateUser, User, UserStatus,
+            UserWithServices,
+        },
+        response_struct::{ApiResponse, MergedUserProfile},
         util_struct::{UploadQuery, UploadResponse},
     },
     utils::auth_utils::get_gcs_client,
@@ -16,6 +19,7 @@ use crate::{
 use actix_web::{HttpResponse, Responder, web};
 use gcloud_storage::sign::{SignedURLMethod, SignedURLOptions};
 use sqlx::PgPool;
+use time::Time;
 use uuid::Uuid;
 
 /* -------------------------------------------------------------------------- */
@@ -390,6 +394,100 @@ async fn set_account_status(
 
         Err(e) => internal_server_error_response(e.to_string()),
     }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+
+async fn set_user_availability(
+    user: AuthenticatedUser,
+    pool: web::Data<PgPool>,
+    body: web::Json<SetAvailability>,
+) -> impl Responder {
+    let user_id = user.user_id;
+    let rules = body.rules.iter();
+
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => return internal_server_error_response(e.to_string()),
+    };
+
+    // Delete all existing rules for this user
+    if let Err(e) = sqlx::query!(
+        "DELETE FROM business_availability WHERE user_id = $1",
+        user_id
+    )
+    .execute(&mut *tx)
+    .await
+    {
+        tx.rollback().await.ok();
+        return internal_server_error_response(e.to_string());
+    }
+
+    let time_format = match time::format_description::parse("[hour]:[minute]:[second]") {
+        Ok(format) => format,
+        Err(_) => return internal_server_error_response("Internal time format error.".to_string()),
+    };
+
+    // Insert the new rules
+    for slot in rules {
+        let open_time = match Time::parse(&slot.open_time, &time_format) {
+            Ok(t) => t,
+            Err(_) => {
+                return bad_request_response(format!(
+                    "Invalid open_time format for {}. Expected HH:MM:SS.",
+                    slot.open_time
+                ));
+            }
+        };
+
+        let close_time = match Time::parse(&slot.close_time, &time_format) {
+            Ok(t) => t,
+            Err(_) => {
+                return bad_request_response(format!(
+                    "Invalid close_time format for {}. Expected HH:MM:SS.",
+                    slot.close_time
+                ));
+            }
+        };
+
+        if let Err(e) = sqlx::query!(
+           r#"
+            INSERT INTO business_availability (user_id, day_of_week, open_time, close_time, time_zone)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+            user_id,
+            slot.day_of_week,
+            open_time,
+            close_time,
+            slot.time_zone
+        )
+        .execute(&mut *tx)
+        .await
+        {
+            tx.rollback().await.ok();
+            return internal_server_error_response(e.to_string());
+        }
+    }
+
+    if let Err(e) = tx.commit().await {
+        return internal_server_error_response(e.to_string());
+    }
+
+    let response = ApiResponse::<()> {
+        success: true,
+        data: None,
+        message: Some("Availability schedule updated successfully.".to_string()),
+    };
+
+    HttpResponse::Ok().json(response)
 }
 
 /* -------------------------------------------------------------------------- */

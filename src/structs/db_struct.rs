@@ -1,8 +1,10 @@
-use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
+use time::{OffsetDateTime, Time};
 use uuid::Uuid;
+
+time::serde::format_description!(time_format, Time, "[hour]:[minute]:[second]");
 
 /* -------------------------------------------------------------------------- */
 /*                                      -                                     */
@@ -22,8 +24,11 @@ pub struct Auth {
     #[serde(skip)]
     pub refresh_token: Option<String>,
 
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub created_at: Option<OffsetDateTime>,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub updated_at: Option<OffsetDateTime>,
 }
 
 #[derive(Deserialize)]
@@ -40,7 +45,7 @@ pub struct GoogleUserInfo {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TokenClaims {
-    pub sub: Uuid, // Our database user.id
+    pub sub: Uuid, // The user.id
     pub exp: i64,
 }
 
@@ -69,9 +74,15 @@ pub struct User {
     pub google_is_connected: Option<bool>,
     pub phone_number_is_whatsapp: Option<bool>,
     pub is_active: Option<bool>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
-    pub last_login: Option<DateTime<Utc>>,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub created_at: Option<OffsetDateTime>,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub updated_at: Option<OffsetDateTime>,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub last_login: Option<OffsetDateTime>,
 }
 
 #[derive(Deserialize)]
@@ -110,8 +121,12 @@ pub struct Service {
     pub duration_minutes: Option<i32>,
     pub image_url: Option<String>,
     pub category: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub created_at: Option<OffsetDateTime>,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub updated_at: Option<OffsetDateTime>,
 }
 
 #[derive(Deserialize)]
@@ -156,11 +171,19 @@ pub struct Appointment {
     pub customer_name: String,
     pub customer_email: Option<String>,
     pub customer_phone: Option<String>,
-    pub appointment_start_time: DateTime<Utc>,
-    pub appointment_end_time: DateTime<Utc>,
     pub notes: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+
+    #[serde(with = "time::serde::rfc3339")]
+    pub appointment_start_time: OffsetDateTime,
+
+    #[serde(with = "time::serde::rfc3339")]
+    pub appointment_end_time: OffsetDateTime,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub created_at: Option<OffsetDateTime>,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub updated_at: Option<OffsetDateTime>,
 }
 
 #[derive(Deserialize)]
@@ -170,8 +193,10 @@ pub struct CreateAppointment {
     pub customer_name: String,
     pub customer_email: Option<String>,
     pub customer_phone: Option<String>,
-    pub appointment_start_time: DateTime<Utc>,
     pub notes: Option<String>,
+
+    #[serde(with = "time::serde::rfc3339")]
+    pub appointment_start_time: OffsetDateTime,
 }
 
 #[derive(Serialize)]
@@ -187,6 +212,7 @@ pub struct GoogleCalendarEvent {
 pub struct GoogleEventDateTime {
     #[serde(rename = "dateTime")]
     pub date_time: String,
+
     #[serde(rename = "timeZone")]
     pub time_zone: String,
 }
@@ -194,4 +220,48 @@ pub struct GoogleEventDateTime {
 #[derive(Serialize)]
 pub struct GoogleEventAttendee {
     pub email: String,
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                              AVAILABILITY RULE                             */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+
+#[derive(Serialize, FromRow)]
+pub struct AvailabilityRule {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub day_of_week: i32,
+    pub time_zone: String,
+
+    #[serde(with = "time_format")]
+    pub open_time: Time,
+
+    #[serde(with = "time_format")]
+    pub close_time: Time,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub created_at: Option<OffsetDateTime>,
+
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub updated_at: Option<OffsetDateTime>,
+}
+
+#[derive(Deserialize)]
+pub struct SetAvailability {
+    #[serde(rename = "slots")]
+    pub rules: Vec<DayTimeSlot>,
+}
+
+#[derive(Deserialize)]
+pub struct DayTimeSlot {
+    pub day_of_week: i32,
+    pub open_time: String,
+    pub close_time: String,
+    pub time_zone: String,
 }

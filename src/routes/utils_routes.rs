@@ -51,3 +51,13 @@ pub fn internal_server_error_response(message: String) -> HttpResponse {
         success: false,
     })
 }
+
+pub fn expectation_failed_response(message: String) -> HttpResponse {
+    eprintln!("{message}");
+
+    HttpResponse::ExpectationFailed().json(ApiResponse::<()> {
+        message: Some(message),
+        data: None,
+        success: false,
+    })
+}

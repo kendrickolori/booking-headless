@@ -1,4 +1,3 @@
--- Add migration script here
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE
@@ -30,9 +29,7 @@ CREATE TABLE
         created_at TIMESTAMPTZ DEFAULT NOW (),
         updated_at TIMESTAMPTZ DEFAULT NOW (),
         --
-        -- Ensures a user can only have one auth entry
         CONSTRAINT auth_user_id_key UNIQUE (user_id),
-        -- Ensures a Google ID can only be used once
         CONSTRAINT auth_google_id_key UNIQUE (google_id)
     );
 
@@ -63,4 +60,21 @@ CREATE TABLE
         notes TEXT DEFAULT '',
         created_at TIMESTAMPTZ DEFAULT NOW (),
         updated_at TIMESTAMPTZ DEFAULT NOW ()
+    );
+
+CREATE TABLE
+    IF NOT EXISTS business_availability (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+        user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        day_of_week INT NOT NULL CHECK (
+            day_of_week >= 1
+            AND day_of_week <= 7
+        ),
+        open_time TIME NOT NULL,
+        close_time TIME NOT NULL,
+        time_zone VARCHAR(50) NOT NULL DEFAULT 'UTC',
+        created_at TIMESTAMPTZ DEFAULT NOW (),
+        updated_at TIMESTAMPTZ DEFAULT NOW (),
+        --
+        UNIQUE (user_id, day_of_week, open_time)
     );
