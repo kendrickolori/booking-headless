@@ -12,14 +12,18 @@ use crate::{
             UserWithServices,
         },
         response_struct::{ApiResponse, MergedUserProfile},
-        util_struct::{UploadQuery, UploadResponse},
+        util_struct::{SlotQuery, TimeSlot, UploadQuery, UploadResponse},
     },
-    utils::auth_utils::get_gcs_client,
+    utils::{auth_utils::get_gcs_client, others_utils::local_to_utc},
 };
 use actix_web::{HttpResponse, Responder, web};
+use chrono_tz::Tz;
 use gcloud_storage::sign::{SignedURLMethod, SignedURLOptions};
 use sqlx::PgPool;
-use time::Time;
+use std::str::FromStr;
+use time::{
+    Date, Duration as TimeDuration, OffsetDateTime, PrimitiveDateTime, Time, format_description,
+};
 use uuid::Uuid;
 
 /* -------------------------------------------------------------------------- */
@@ -447,6 +451,145 @@ async fn set_account_status(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
+async fn get_available_slots(
+    path: web::Path<Uuid>,
+    query: web::Query<SlotQuery>,
+    pool: web::Data<PgPool>,
+) -> impl Responder {
+    let user_id = path.into_inner();
+    let date_str = &query.date;
+
+    let format = match format_description::parse("[year]-[month]-[day]") {
+        Ok(f) => f,
+        Err(_) => {
+            // This would never reach here because of a correct format in the parse above
+            return internal_server_error_response("Invalid date format in code!".to_string());
+        }
+    };
+
+    let requested_date = match Date::parse(date_str, &format) {
+        Ok(d) => d,
+        Err(_) => return bad_request_response("Invalid date format (YYYY-MM-DD)".to_string()),
+    };
+
+    let service = match sqlx::query_as!(
+        Service,
+        "SELECT * FROM services WHERE id = $1",
+        query.service_id
+    )
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(s) => s,
+        Err(_) => return not_found_response("Service not found.".to_string()),
+    };
+
+    let duration_minuites = service.duration_minutes.unwrap_or(30) as i64;
+    let weekday = requested_date.weekday().number_from_monday() as i32;
+
+    let rules = match sqlx::query_as!(
+        AvailabilityRule,
+        "SELECT * FROM business_availability WHERE user_id = $1 AND day_of_week = $2",
+        user_id,
+        weekday
+    )
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => return internal_server_error_response(e.to_string()),
+    };
+
+    if rules.is_empty() {
+        return HttpResponse::Ok().json(ApiResponse {
+            success: true,
+            data: Some(Vec::<TimeSlot>::new()),
+            message: Some("Closed this day".to_string()),
+        });
+    }
+
+    let tz: Tz = match Tz::from_str(&rules[0].time_zone) {
+        Ok(z) => z,
+        Err(_) => return internal_server_error_response("Invalid DB Timezone".to_string()),
+    };
+
+    // Fetch appointments for the whole day (in UTC).
+    // We construct a generous UTC window to catch all potential overlaps.
+    let day_start_naive = PrimitiveDateTime::new(requested_date, Time::MIDNIGHT);
+    let day_end_naive = PrimitiveDateTime::new(requested_date.next_day().unwrap(), Time::MIDNIGHT);
+
+    let utc_window_start = local_to_utc(day_start_naive, &tz).unwrap();
+    let utc_window_end = local_to_utc(day_end_naive, &tz).unwrap();
+
+    let appointments = match sqlx::query_as!(
+        Appointment,
+        "SELECT * FROM appointments WHERE business_id = $1
+        AND appointment_end_time > $2
+        AND appointment_start_time < $3",
+        user_id,
+        utc_window_start,
+        utc_window_end
+    )
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(a) => a,
+        Err(e) => return internal_server_error_response(e.to_string()),
+    };
+
+    let mut available_slots: Vec<TimeSlot> = Vec::new();
+    let step = TimeDuration::minutes(30);
+
+    for rule in rules {
+        let mut current_naive = PrimitiveDateTime::new(requested_date, rule.open_time);
+        let close_naive = PrimitiveDateTime::new(requested_date, rule.close_time);
+
+        while current_naive + TimeDuration::minutes(duration_minuites) <= close_naive {
+            let slot_end_naive = current_naive + TimeDuration::minutes(duration_minuites);
+
+            if let Some(slot_start_utc) = local_to_utc(current_naive, &tz) {
+                if let Some(slot_end_utc) = local_to_utc(slot_end_naive, &tz) {
+                    let is_clashing = appointments.iter().any(|appt| {
+                        // Overlap logic: (StartA < EndB) and (EndA > StartB)
+                        appt.appointment_start_time < slot_end_utc
+                            && appt.appointment_end_time > slot_start_utc
+                    });
+
+                    if !is_clashing {
+                        available_slots.push(TimeSlot {
+                            start_time: slot_start_utc
+                                .format(&time::format_description::well_known::Rfc3339)
+                                .unwrap(),
+
+                            end_time: slot_end_utc
+                                .format(&time::format_description::well_known::Rfc3339)
+                                .unwrap(),
+                        });
+                    }
+                }
+            }
+
+            current_naive += step;
+        }
+    }
+
+    HttpResponse::Ok().json(ApiResponse {
+        success: true,
+        data: Some(available_slots),
+        message: Some("All available slots have been retrieved".to_string()),
+    })
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+
 async fn set_user_availability(
     user: AuthenticatedUser,
     pool: web::Data<PgPool>,
@@ -549,6 +692,7 @@ pub fn user_config(cfg: &mut web::ServiceConfig) {
             .route("/me/status", web::patch().to(set_account_status))
             .route("/me/availability", web::post().to(set_user_availability))
             .route("/with-services", web::get().to(get_all_users_with_services))
+            .route("/{id}/slots", web::get().to(get_available_slots))
             .route(
                 "/{id}/appointments",
                 web::get().to(get_appointments_for_user),

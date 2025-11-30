@@ -36,3 +36,26 @@ pub fn convert_to_local_primitive(
 
     Ok(PrimitiveDateTime::new(time_date, time_time))
 }
+
+pub fn local_to_utc(local_date: PrimitiveDateTime, tz: &Tz) -> Option<time::OffsetDateTime> {
+    // Convert time::PrimitiveDateTime -> chrono::NaiveDateTime
+    let chrono_naive = chrono::NaiveDate::from_ymd_opt(
+        local_date.year(),
+        local_date.month() as u32,
+        local_date.day() as u32,
+    )?
+    .and_hms_opt(
+        local_date.hour() as u32,
+        local_date.minute() as u32,
+        local_date.second() as u32,
+    )?;
+
+    // Attach Timezone
+    let chrono_tz_aware = tz.from_local_datetime(&chrono_naive).single()?;
+
+    // Convert to UTC
+    let chrono_utc = chrono_tz_aware.with_timezone(&chrono::Utc);
+
+    // Convert back to time::OffsetDateTime
+    time::OffsetDateTime::from_unix_timestamp(chrono_utc.timestamp()).ok()
+}
