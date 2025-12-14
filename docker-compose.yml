@@ -1,0 +1,47 @@
+services:
+  app:
+    build: .
+    container_name: booking_backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DATABASE_URL=postgres://user:password@db:5432/booking_db
+      - REDIS_URL=redis://redis:6379
+      - PORT=8080
+      - JWT_SECRET=${JWT_SECRET}
+
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
+      - GOOGLE_SERVICE_ACCOUNT_PATH=/app/service_account.json
+    volumes:
+      - ./service_account.json:/app/service_account.json
+
+  db:
+    image: postgres:15-alpine
+    container_name: booking_db
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: booking_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Exposed for local debugging
+
+  redis:
+    image: redis:7-alpine
+    container_name: booking_redis
+    restart: always
+    volumes:
+      - redis_data:/data
+
+# Persist data so it survives container restarts
+volumes:
+  postgres_data:
+  redis_data:

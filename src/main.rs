@@ -19,7 +19,7 @@ use sqlx::postgres::PgPoolOptions;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config = Config::from_env();
-    let bind_address = format!("127.0.0.1:{}", config.port);
+    let bind_address = format!("0.0.0.0:{}", config.port);
     let http_client = reqwest::Client::new();
     let redis_cfg = RedisConfig::from_url(&config.redis_url);
     let redis_pool = redis_cfg.create_pool(Some(Runtime::Tokio1)).unwrap();
