@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO business_availability (user_id, day_of_week, open_time, close_time, time_zone)\n            VALUES ($1, $2, $3, $4, $5)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Time",
+        "Time",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "480b4c7505900505c8b07076dd926f6be1c3fc0e53d87286412cffe8889f3041"
+}
