@@ -11,7 +11,7 @@ use crate::{
             Appointment, Auth, AvailabilityRule, Service, SetAvailability, UpdateUser, User,
             UserStatus, UserWithServices,
         },
-        response_struct::{ApiResponse, MergedUserProfile},
+        response_struct::{ApiResponse, EmptyStruct, MergedUserProfile},
         util_struct::{
             FreeBusyRequest, FreeBusyRequestItem, FreeBusyResponse, SlotQuery, TimeSlot,
             UploadQuery, UploadResponse,
@@ -38,7 +38,19 @@ use uuid::Uuid;
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_user_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl Responder {
+#[utoipa::path(
+    get,
+    path = "/users/{id}",
+    tag = "Users",
+    params(("id" = Uuid, Path, description = "User ID")),
+    responses(
+        (status = 200, body = ApiResponse<MergedUserProfile>),
+        (status = 404, description = "Not Found"),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_user_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl Responder {
     let user_id = path.into_inner();
 
     let profile = match sqlx::query_as!(User, r#"SELECT * FROM users WHERE id = $1"#, user_id)
@@ -87,7 +99,17 @@ async fn get_user_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl 
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_all_users(pool: web::Data<PgPool>) -> impl Responder {
+#[utoipa::path(
+    get,
+    path = "/users",
+    tag = "Users",
+    responses(
+        (status = 200, body = ApiResponse<Vec<User>>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_all_users(pool: web::Data<PgPool>) -> impl Responder {
     match sqlx::query_as!(User, "SELECT * FROM users WHERE is_active = TRUE")
         .fetch_all(pool.get_ref())
         .await
@@ -112,7 +134,17 @@ async fn get_all_users(pool: web::Data<PgPool>) -> impl Responder {
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_all_users_with_services(pool: web::Data<PgPool>) -> impl Responder {
+#[utoipa::path(
+    get,
+    path = "/users/with-services",
+    tag = "Users",
+    responses(
+        (status = 200, body = ApiResponse<Vec<UserWithServices>>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_all_users_with_services(pool: web::Data<PgPool>) -> impl Responder {
     // Fetch all users
     let users_result = sqlx::query_as!(User, r#"SELECT * FROM users WHERE is_active = TRUE"#)
         .fetch_all(pool.get_ref())
@@ -173,7 +205,20 @@ async fn get_all_users_with_services(pool: web::Data<PgPool>) -> impl Responder 
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn update_user(
+#[utoipa::path(
+    patch,
+    path = "/users/{id}",
+    tag = "Users",
+    params(("id" = Uuid, Path, description = "User ID")),
+    request_body = UpdateUser,
+    responses(
+        (status = 200, body = ApiResponse<User>),
+        (status = 404, description = "Not Found"),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn update_user(
     path: web::Path<Uuid>,
     updated_user: web::Json<UpdateUser>,
     pool: web::Data<PgPool>,
@@ -238,7 +283,18 @@ async fn update_user(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_appointments_for_user(
+#[utoipa::path(
+    get,
+    path = "/users/{id}/appointments",
+    tag = "Users",
+    params(("id" = Uuid, Path, description = "User ID")),
+    responses(
+        (status = 200, body = ApiResponse<Vec<Appointment>>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_appointments_for_user(
     path: web::Path<Uuid>,
     pool: web::Data<PgPool>,
 ) -> impl Responder {
@@ -276,7 +332,18 @@ async fn get_appointments_for_user(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_me(user: AuthenticatedUser, pool: web::Data<PgPool>) -> impl Responder {
+#[utoipa::path(
+    get,
+    path = "/users/me",
+    tag = "Users",
+    responses(
+        (status = 200, body = ApiResponse<MergedUserProfile>),
+        (status = 404, description = "Not Found"),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_me(user: AuthenticatedUser, pool: web::Data<PgPool>) -> impl Responder {
     let logged_in_user_id = user.user_id;
 
     let profile = match sqlx::query_as!(
@@ -329,7 +396,17 @@ async fn get_me(user: AuthenticatedUser, pool: web::Data<PgPool>) -> impl Respon
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_user_upload_url(
+#[utoipa::path(
+    get,
+    path = "/users/me/upload-url",
+    tag = "Users",
+    responses(
+        (status = 200, body = ApiResponse<UploadResponse>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_user_upload_url(
     user: AuthenticatedUser,
     query: web::Query<UploadQuery>,
     config: web::Data<Config>,
@@ -412,7 +489,18 @@ async fn get_user_upload_url(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn set_account_status(
+#[utoipa::path(
+    patch,
+    path = "/users/me/status",
+    tag = "Users",
+    request_body = UserStatus,
+    responses(
+        (status = 200, body = ApiResponse<User>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn set_account_status(
     user: AuthenticatedUser,
     body: web::Json<UserStatus>,
     pool: web::Data<PgPool>,
@@ -459,7 +547,18 @@ async fn set_account_status(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_available_slots(
+#[utoipa::path(
+    get,
+    path = "/users/{id}/slots",
+    tag = "Users",
+    params(("id" = Uuid, Path, description = "User ID")),
+    responses(
+        (status = 200, body = ApiResponse<Vec<TimeSlot>>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_available_slots(
     path: web::Path<Uuid>,
     query: web::Query<SlotQuery>,
     pool: web::Data<PgPool>,
@@ -681,7 +780,18 @@ async fn get_available_slots(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn set_user_availability(
+#[utoipa::path(
+    post,
+    path = "/users/me/availability",
+    tag = "Users",
+    request_body = SetAvailability,
+    responses(
+        (status = 200, body = ApiResponse<EmptyStruct>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn set_user_availability(
     user: AuthenticatedUser,
     pool: web::Data<PgPool>,
     body: web::Json<SetAvailability>,

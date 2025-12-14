@@ -2,6 +2,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
 use time::{OffsetDateTime, Time};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 time::serde::format_description!(time_format, Time, "[hour]:[minute]:[second]");
@@ -15,7 +16,7 @@ time::serde::format_description!(time_format, Time, "[hour]:[minute]:[second]");
 /* -------------------------------------------------------------------------- */
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, ToSchema)]
 pub struct Auth {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -31,19 +32,19 @@ pub struct Auth {
     pub updated_at: Option<OffsetDateTime>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct GoogleCode {
     pub code: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct GoogleUserInfo {
     pub sub: String, // The unique Google ID (provider_id)
     pub email: Option<String>,
     pub name: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct TokenClaims {
     pub sub: Uuid, // The user.id
     pub exp: i64,
@@ -59,7 +60,7 @@ pub struct TokenClaims {
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, ToSchema)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
@@ -85,7 +86,7 @@ pub struct User {
     pub last_login: Option<OffsetDateTime>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct UpdateUser {
     pub username: Option<String>,
     pub business_name: Option<String>,
@@ -96,7 +97,7 @@ pub struct UpdateUser {
     pub phone_number_is_whatsapp: Option<bool>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct UserStatus {
     pub status: Option<bool>,
 }
@@ -111,7 +112,7 @@ pub struct UserStatus {
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, ToSchema)]
 pub struct Service {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -129,7 +130,7 @@ pub struct Service {
     pub updated_at: Option<OffsetDateTime>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CreateService {
     pub service_name: String,
     pub description: Option<String>,
@@ -138,7 +139,7 @@ pub struct CreateService {
     pub category: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct UpdateService {
     pub service_name: Option<String>,
     pub description: Option<String>,
@@ -147,7 +148,7 @@ pub struct UpdateService {
     pub category: Option<String>,
 }
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, ToSchema)]
 pub struct UserWithServices {
     pub user: User,
     pub services: Vec<Service>,
@@ -163,7 +164,7 @@ pub struct UserWithServices {
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, ToSchema)]
 pub struct Appointment {
     pub id: Uuid,
     pub service_id: Uuid,
@@ -186,7 +187,7 @@ pub struct Appointment {
     pub updated_at: Option<OffsetDateTime>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CreateAppointment {
     pub service_id: Uuid,
     pub business_id: Uuid,
@@ -199,7 +200,7 @@ pub struct CreateAppointment {
     pub appointment_start_time: OffsetDateTime,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct GoogleCalendarEvent {
     pub summary: String,
     pub description: String,
@@ -208,7 +209,7 @@ pub struct GoogleCalendarEvent {
     pub attendees: Vec<GoogleEventAttendee>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct GoogleEventDateTime {
     #[serde(rename = "dateTime")]
     pub date_time: String,
@@ -217,7 +218,7 @@ pub struct GoogleEventDateTime {
     pub time_zone: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct GoogleEventAttendee {
     pub email: String,
 }
@@ -232,7 +233,7 @@ pub struct GoogleEventAttendee {
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, ToSchema)]
 pub struct AvailabilityRule {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -240,9 +241,11 @@ pub struct AvailabilityRule {
     pub time_zone: String,
 
     #[serde(with = "time_format")]
+    #[schema(value_type = String, format = "date-time")]
     pub open_time: Time,
 
     #[serde(with = "time_format")]
+    #[schema(value_type = String, format = "date-time")]
     pub close_time: Time,
 
     #[serde(with = "time::serde::rfc3339::option")]
@@ -252,13 +255,13 @@ pub struct AvailabilityRule {
     pub updated_at: Option<OffsetDateTime>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct SetAvailability {
     #[serde(rename = "slots")]
     pub rules: Vec<DayTimeSlot>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct DayTimeSlot {
     pub day_of_week: i32,
     pub open_time: String,

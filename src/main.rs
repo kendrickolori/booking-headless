@@ -10,11 +10,16 @@ use crate::{
         appointment_routes, auth_routes, service_routes, user_routes,
         utils_routes::{home, route_not_found},
     },
-    utils::response_utils::{json_error_handler, path_error_handler, query_error_handler},
+    utils::{
+        api_doc::ApiDoc,
+        response_utils::{json_error_handler, path_error_handler, query_error_handler},
+    },
 };
 use actix_web::{App, HttpServer, web};
 use deadpool_redis::{Config as RedisConfig, Runtime};
 use sqlx::postgres::PgPoolOptions;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -59,6 +64,10 @@ async fn main() -> std::io::Result<()> {
             .configure(service_routes::service_config)
             .configure(appointment_routes::appointment_config)
             .service(home)
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api-docs/openapi.json", ApiDoc::openapi()),
+            )
             .default_service(web::to(route_not_found))
     })
     .bind(bind_address)?

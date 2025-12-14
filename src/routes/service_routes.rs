@@ -20,7 +20,18 @@ use uuid::Uuid;
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn create_service(
+#[utoipa::path(
+    post,
+    path = "/services",
+    tag = "Services",
+    request_body = CreateService,
+    responses(
+        (status = 201, body = ApiResponse<Service>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn create_service(
     user: AuthenticatedUser,
     pool: web::Data<PgPool>,
     body: web::Json<CreateService>,
@@ -87,7 +98,19 @@ async fn create_service(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_service_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl Responder {
+#[utoipa::path(
+    get,
+    path = "/services/{id}",
+    tag = "Services",
+    params(("id" = Uuid, Path, description = "Service ID")),
+    responses(
+        (status = 200, body = ApiResponse<Service>),
+        (status = 404, description = "Not Found"),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_service_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl Responder {
     let service_id = path.into_inner();
 
     match sqlx::query_as!(
@@ -148,7 +171,17 @@ async fn get_service_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> im
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_all_services(pool: web::Data<PgPool>) -> impl Responder {
+#[utoipa::path(
+    get,
+    path = "/services",
+    tag = "Services",
+    responses(
+        (status = 200, body = ApiResponse<Vec<Service>>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_all_services(pool: web::Data<PgPool>) -> impl Responder {
     match sqlx::query_as!(
         Service,
         r#"
@@ -179,7 +212,20 @@ async fn get_all_services(pool: web::Data<PgPool>) -> impl Responder {
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn update_service(
+#[utoipa::path(
+    patch,
+    path = "/services/{id}",
+    tag = "Services",
+    params(("id" = Uuid, Path, description = "Service ID")),
+    request_body = UpdateService,
+    responses(
+        (status = 200, body = ApiResponse<Service>),
+        (status = 404, description = "Not Found"),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn update_service(
     path: web::Path<Uuid>,
     user: AuthenticatedUser,
     pool: web::Data<PgPool>,
@@ -267,7 +313,19 @@ async fn update_service(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn delete_service(
+#[utoipa::path(
+    delete,
+    path = "/services/{id}",
+    tag = "Services",
+    params(("id" = Uuid, Path, description = "Service ID")),
+    responses(
+        (status = 200, body = ApiResponse<Service>),
+        (status = 404, description = "Not Found"),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn delete_service(
     user: AuthenticatedUser,
     path: web::Path<Uuid>,
     pool: web::Data<PgPool>,
@@ -333,7 +391,19 @@ async fn delete_service(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_service_upload_url(
+#[utoipa::path(
+    get,
+    path = "/services/{id}/upload-url",
+    tag = "Services",
+    params(("id" = Uuid, Path, description = "Service ID")),
+    responses(
+        (status = 200, body = ApiResponse<UploadResponse>),
+        (status = 404, description = "Not Found"),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_service_upload_url(
     path: web::Path<Uuid>,
     user: AuthenticatedUser,
     config: web::Data<Config>,

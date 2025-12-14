@@ -23,7 +23,18 @@ use uuid::Uuid;
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn create_appointment(
+#[utoipa::path(
+    post,
+    path = "/appointments",
+    tag = "Appointments",
+    request_body = CreateAppointment,
+    responses(
+        (status = 201, body = ApiResponse<Appointment>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn create_appointment(
     config: web::Data<Config>,
     pool: web::Data<PgPool>,
     body: web::Json<CreateAppointment>,
@@ -341,7 +352,24 @@ async fn create_appointment(
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_appointment_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> impl Responder {
+#[utoipa::path(
+    get,
+    path = "/appointments/{id}",
+    tag = "Appointments",
+    params(
+        ("id" = Uuid, Path, description = "Appointment ID")
+    ),
+    responses(
+        (status = 200, body = ApiResponse<Appointment>),
+        (status = 404, description = "Not Found"),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_appointment_by_id(
+    path: web::Path<Uuid>,
+    pool: web::Data<PgPool>,
+) -> impl Responder {
     let appt_id = path.into_inner();
 
     match sqlx::query_as!(
@@ -375,7 +403,17 @@ async fn get_appointment_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -
 /*                                      -                                     */
 /* -------------------------------------------------------------------------- */
 
-async fn get_all_appointments(pool: web::Data<PgPool>) -> impl Responder {
+#[utoipa::path(
+    get,
+    path = "/appointments",
+    tag = "Appointments",
+    responses(
+        (status = 200, body = ApiResponse<Vec<Appointment>>),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    )
+)]
+pub async fn get_all_appointments(pool: web::Data<PgPool>) -> impl Responder {
     match sqlx::query_as!(Appointment, r#"SELECT * FROM appointments"#)
         .fetch_all(pool.get_ref())
         .await
