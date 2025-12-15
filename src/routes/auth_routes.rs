@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::routes::utils_routes::{bad_request_response, internal_server_error_response};
 use crate::structs::db_struct::{Auth, GoogleCode, GoogleUserInfo, TokenClaims, User};
 use crate::structs::response_struct::ApiResponse;
+use crate::utils::auth_utils::CreateGoogleAuthClientReturnType;
 use actix_web::{HttpResponse, Responder, web};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header, encode};
@@ -13,23 +14,7 @@ use reqwest;
 use sqlx::PgPool;
 
 // Helper to create the OAuth client
-fn create_google_oauth_client(
-    config: Config,
-) -> oauth2::Client<
-    oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
-    oauth2::StandardTokenResponse<oauth2::EmptyExtraTokenFields, oauth2::basic::BasicTokenType>,
-    oauth2::StandardTokenIntrospectionResponse<
-        oauth2::EmptyExtraTokenFields,
-        oauth2::basic::BasicTokenType,
-    >,
-    oauth2::StandardRevocableToken,
-    oauth2::StandardErrorResponse<oauth2::RevocationErrorResponseType>,
-    oauth2::EndpointSet,
-    oauth2::EndpointNotSet,
-    oauth2::EndpointNotSet,
-    oauth2::EndpointNotSet,
-    oauth2::EndpointSet,
-> {
+fn create_google_oauth_client(config: Config) -> CreateGoogleAuthClientReturnType {
     let Config {
         google_client_id,
         google_client_secret,
