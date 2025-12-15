@@ -1,6 +1,6 @@
-use utoipa::OpenApi;
-use crate::routes::{appointment_routes, user_routes, service_routes};
+use crate::routes::{appointment_routes, service_routes, user_routes};
 use crate::structs::{db_struct, response_struct, util_struct};
+use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -9,7 +9,7 @@ use crate::structs::{db_struct, response_struct, util_struct};
         appointment_routes::create_appointment,
         appointment_routes::get_all_appointments,
         appointment_routes::get_appointment_by_id,
-        
+
         // Services
         service_routes::create_service,
         service_routes::get_all_services,
@@ -30,7 +30,7 @@ use crate::structs::{db_struct, response_struct, util_struct};
             db_struct::CreateService,
             db_struct::UpdateService,
             util_struct::TimeSlot,
-            
+
             // Generic wrappers (Aliased for documentation)
             response_struct::ApiResponse<db_struct::Appointment>,
             response_struct::ApiResponse<Vec<db_struct::Service>>,
