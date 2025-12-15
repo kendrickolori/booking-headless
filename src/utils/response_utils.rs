@@ -5,7 +5,7 @@ pub fn path_error_handler(err: error::PathError, _req: &HttpRequest) -> error::E
     let error_response = ApiResponse::<()> {
         success: false,
         data: None,
-        message: Some(format!("Invalid input in URL: {}", err.to_string())),
+        message: Some(format!("Invalid input in URL: {}", err)),
     };
 
     let http_response = HttpResponse::BadRequest().json(error_response);
@@ -16,9 +16,9 @@ pub fn path_error_handler(err: error::PathError, _req: &HttpRequest) -> error::E
 pub fn json_error_handler(err: error::JsonPayloadError, _req: &HttpRequest) -> error::Error {
     let error_message = match &err {
         error::JsonPayloadError::Deserialize(json_err) => {
-            format!("Invalid JSON in request body: {}", json_err.to_string())
+            format!("Invalid JSON in request body: {}", json_err)
         }
-        _ => format!("Invalid request: {}", err.to_string()),
+        _ => format!("Invalid request: {}", err),
     };
 
     let error_response = ApiResponse::<()> {
@@ -35,9 +35,9 @@ pub fn json_error_handler(err: error::JsonPayloadError, _req: &HttpRequest) -> e
 pub fn query_error_handler(err: error::QueryPayloadError, _req: &HttpRequest) -> error::Error {
     let error_message = match &err {
         error::QueryPayloadError::Deserialize(query_err) => {
-            format!("Invalid query in request url: {}", query_err.to_string())
+            format!("Invalid query in request url: {}", query_err)
         }
-        _ => format!("Invalid request: {}", err.to_string()),
+        _ => format!("Invalid request: {}", err),
     };
 
     let error_response = ApiResponse::<()> {

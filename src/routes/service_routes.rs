@@ -77,10 +77,10 @@ pub async fn create_service(
         }),
 
         Err(e) => {
-            if let sqlx::Error::Database(db_err) = &e {
-                if db_err.is_foreign_key_violation() {
-                    return not_found_response("The user_id provided does not exist.".to_string());
-                }
+            if let sqlx::Error::Database(db_err) = &e
+                && db_err.is_foreign_key_violation()
+            {
+                return not_found_response("The user_id provided does not exist.".to_string());
             }
 
             internal_server_error_response(e.to_string())
@@ -147,11 +147,9 @@ pub async fn get_service_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -
                         message: Some("The owner of this service is not active".to_string()),
                     };
 
-                    return HttpResponse::Forbidden().json(response);
+                    HttpResponse::Forbidden().json(response)
                 }
-                _ => {
-                    return not_found_response("User not found.".to_string());
-                }
+                _ => not_found_response("User not found.".to_string()),
             }
         }
 
@@ -474,7 +472,7 @@ pub async fn get_service_upload_url(
         success: true,
         data: Some(UploadResponse {
             signed_upload_url: signed_url,
-            public_url: public_url,
+            public_url,
         }),
         message: Some("Upload URL generated.".to_string()),
     };

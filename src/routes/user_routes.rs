@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+#![allow(clippy::collapsible_if)]
 
 use crate::{
     config::Config,
@@ -28,8 +28,9 @@ use deadpool_redis::redis;
 use gcloud_storage::sign::{SignedURLMethod, SignedURLOptions};
 use sqlx::PgPool;
 use std::str::FromStr;
+use std::{collections::HashMap, time::Duration};
 use time::{
-    Date, Duration as TimeDuration, OffsetDateTime, PrimitiveDateTime, Time,
+    Date, OffsetDateTime, PrimitiveDateTime, Time,
     format_description::{self, well_known::Rfc3339},
 };
 use uuid::Uuid;
@@ -86,7 +87,7 @@ pub async fn get_user_by_id(path: web::Path<Uuid>, pool: web::Data<PgPool>) -> i
         }),
     };
 
-    return HttpResponse::ServiceUnavailable().json(response);
+    HttpResponse::ServiceUnavailable().json(response)
 }
 
 /* -------------------------------------------------------------------------- */
@@ -183,7 +184,7 @@ pub async fn get_all_users_with_services(pool: web::Data<PgPool>) -> impl Respon
     let response: Vec<UserWithServices> = all_users
         .into_iter()
         .map(|user| {
-            let services = services_map.remove(&user.id).unwrap_or_else(Vec::new);
+            let services = services_map.remove(&user.id).unwrap_or_default();
             UserWithServices { user, services }
         })
         .collect();
@@ -383,7 +384,7 @@ pub async fn get_me(user: AuthenticatedUser, pool: web::Data<PgPool>) -> impl Re
         }),
     };
 
-    return HttpResponse::ServiceUnavailable().json(response);
+    HttpResponse::Ok().json(response)
 }
 
 /* -------------------------------------------------------------------------- */
@@ -471,7 +472,7 @@ pub async fn get_user_upload_url(
         success: true,
         data: Some(UploadResponse {
             signed_upload_url: signed_url,
-            public_url: public_url,
+            public_url,
         }),
         message: Some("Upload URL generated.".to_string()),
     };

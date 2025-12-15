@@ -15,6 +15,6 @@ pub struct MergedUserProfile {
     pub profile: User,
     pub availability: Vec<AvailabilityRule>,
 }
-
+#[allow(dead_code)]
 #[derive(Serialize, ToSchema)]
 pub struct EmptyStruct {}
