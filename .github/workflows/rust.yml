@@ -1,0 +1,43 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  # 👇 Critical for SQLx!
+  # This tells the compiler: "Don't try to connect to a real DB,
+  # just read the sqlx-data.json file to verify queries."
+  SQLX_OFFLINE: true 
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache dependencies
+        # This speeds up the build massively by caching crates
+        uses: swatinem/rust-cache@v2
+
+      - name: Check Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint with Clippy
+        # Fails if there are warnings or errors
+        run: cargo clippy -- -D warnings
+
+      - name: Run Tests
+        # Runs your new unit tests
+        run: cargo test

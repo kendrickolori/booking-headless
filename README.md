@@ -1,6 +1,6 @@
 # 📅 Booking Headless API
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Rust CI](https://github.com/onfranciis/booking-headless/actions/workflows/rust.yml/badge.svg)
 ![Rust Version](https://img.shields.io/badge/rust-1.80%2B-orange?logo=rust)
 ![Docker](https://img.shields.io/badge/docker-ready-blue?logo=docker)
 ![License](https://img.shields.io/badge/license-MIT-green)
