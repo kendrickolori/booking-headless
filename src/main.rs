@@ -4,6 +4,9 @@ mod routes;
 mod structs;
 mod utils;
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     config::Config,
     routes::{
