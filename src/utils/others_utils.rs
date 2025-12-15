@@ -1,7 +1,11 @@
+use crate::structs::util_struct::TimeSlot;
 use chrono::{Datelike, TimeZone, Timelike};
 use chrono_tz::Tz;
 use std::str::FromStr;
-use time::{Date, Month, OffsetDateTime, PrimitiveDateTime, Time};
+use time::{
+    Date, Duration, Month, OffsetDateTime, PrimitiveDateTime, Time,
+    format_description::well_known::Rfc3339,
+};
 
 pub fn convert_to_local_primitive(
     dt_utc: OffsetDateTime,
@@ -58,4 +62,42 @@ pub fn local_to_utc(local_date: PrimitiveDateTime, tz: &Tz) -> Option<time::Offs
 
     // Convert back to time::OffsetDateTime
     time::OffsetDateTime::from_unix_timestamp(chrono_utc.timestamp()).ok()
+}
+
+pub fn generate_slots(
+    start_time: PrimitiveDateTime,
+    end_time: PrimitiveDateTime,
+    duration_minutes: i64,
+    time_zone: &chrono_tz::Tz,
+    blocked_periods: &[(OffsetDateTime, OffsetDateTime)],
+) -> Vec<TimeSlot> {
+    let mut available_slots = Vec::new();
+    let step = Duration::minutes(30);
+    let mut current_open = start_time;
+
+    while current_open + Duration::minutes(duration_minutes) <= end_time {
+        let slot_end = current_open + Duration::minutes(duration_minutes);
+
+        // Convert to UTC for comparison
+        if let (Some(slot_start_utc), Some(slot_end_utc)) = (
+            local_to_utc(current_open, time_zone),
+            local_to_utc(slot_end, time_zone),
+        ) {
+            // The Collision Logic
+            let is_clashing = blocked_periods.iter().any(|(busy_start, busy_end)| {
+                // Overlap: StartA < EndB && EndA > StartB
+                *busy_start < slot_end_utc && *busy_end > slot_start_utc
+            });
+
+            if !is_clashing {
+                available_slots.push(TimeSlot {
+                    start_time: slot_start_utc.format(&Rfc3339).unwrap(),
+                    end_time: slot_end_utc.format(&Rfc3339).unwrap(),
+                });
+            }
+        }
+        current_open += step;
+    }
+
+    available_slots
 }

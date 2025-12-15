@@ -19,7 +19,7 @@ use crate::{
     },
     utils::{
         auth_utils::{get_gcs_client, get_new_access_token},
-        others_utils::local_to_utc,
+        others_utils::{generate_slots, local_to_utc},
     },
 };
 use actix_web::{HttpResponse, Responder, web};
@@ -721,34 +721,19 @@ pub async fn get_available_slots(
 
     // Generate Slots And Check Collisions
     let mut available_slots: Vec<TimeSlot> = Vec::new();
-    let step = TimeDuration::minutes(30);
 
     for rule in rules {
-        let mut current_open_naive = PrimitiveDateTime::new(requested_date, rule.open_time);
+        let current_open_naive = PrimitiveDateTime::new(requested_date, rule.open_time);
         let current_close_naive = PrimitiveDateTime::new(requested_date, rule.close_time);
+        let mut generated_slots = generate_slots(
+            current_open_naive,
+            current_close_naive,
+            duration_minutes,
+            &tz,
+            &blocked_periods,
+        );
 
-        while current_open_naive + TimeDuration::minutes(duration_minutes) <= current_close_naive {
-            let slot_end_naive = current_open_naive + TimeDuration::minutes(duration_minutes);
-
-            // Convert to UTC for comparison
-            if let Some(slot_start_utc) = local_to_utc(current_open_naive, &tz) {
-                if let Some(slot_end_utc) = local_to_utc(slot_end_naive, &tz) {
-                    let is_clashing = blocked_periods.iter().any(|(busy_start, busy_end)| {
-                        // Overlap Logic: (StartA < EndB) and (EndA > StartB)
-                        *busy_start < slot_end_utc && *busy_end > slot_start_utc
-                    });
-
-                    if !is_clashing {
-                        available_slots.push(TimeSlot {
-                            start_time: slot_start_utc.format(&Rfc3339).unwrap(),
-                            end_time: slot_end_utc.format(&Rfc3339).unwrap(),
-                        });
-                    }
-                }
-            }
-
-            current_open_naive += step;
-        }
+        available_slots.append(&mut generated_slots);
     }
 
     // Cache the result
