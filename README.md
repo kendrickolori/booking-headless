@@ -125,7 +125,7 @@ This provides a complete definition of all endpoints, request schemas, and respo
 
      ```bash
     git clone https://github.com/onfranciis/booking-headless.git
-    cd booking-api
+    cd booking-headless
     ```
 
 2.  **Environment Setup**
