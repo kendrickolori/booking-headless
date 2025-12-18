@@ -7,7 +7,7 @@
 
 > **A high-performance, headless appointment scheduling engine.**
 
-Rusty Booking is a client-agnostic backend service designed to power scheduling for **Web, Mobile (iOS/Android), and Desktop** applications. By strictly decoupling business logic from the presentation layer, this API serves as a central, authoritative decision engine for time management across all your client platforms.
+This is a client-agnostic backend service designed to power scheduling for **Web, Mobile (iOS/Android), and Desktop** applications. By strictly decoupling business logic from the presentation layer, this API serves as a central, authoritative decision engine for time management across all your client platforms.
 
 Built with **Rust** and **Actix-Web**, it features two-way Google Calendar synchronization, atomic database transactions, and a "Fail-Fast" configuration philosophy.
 
